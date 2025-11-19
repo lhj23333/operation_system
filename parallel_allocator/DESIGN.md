@@ -34,19 +34,89 @@
 
 ## 架构设计
 
-### 分层模型
+### 分层模型（4层模型）
 
 ```
-Layer 4: allocator    (公共接口)
-    ↓
-Layer 3: heap         (堆管理)
-    ↓
-Layer 2: mem_block    (块管理)
-    ↓
-Layer 1: vmalloc      (虚拟内存)
-    ↓
-Linux Kernel (mmap/munmap)
+┌──────────────────────────────────────────────────────────────┐
+│                 第4层：公共接口层 (Allocator)                 │
+│  void *myalloc(size_t size)  /  int myfree(void *ptr)        │
+│  allocator_init()  /  allocator_cleanup()                    │
+│                  ↓ 调用           ↑ 返回结果                  │
+├──────────────────────────────────────────────────────────────┤
+│        第3层：堆管理层 (Heap) - 核心业务逻辑                  │
+│  heap_init()  /  heap_allocate()  /  heap_free()             │
+│  heap_merge_free_blocks()  /  heap_verify()                  │
+│  ├─ 维护内存块链表（有序、无重叠）                           │
+│  ├─ 实现分配策略（首适配/最佳适配/最差适配）                 │
+│  ├─ 执行块分割和合并                                         │
+│  ├─ 管理统计信息                                             │
+│  └─ 线程安全（互斥锁保护）                                   │
+│                  ↓ 操作             ↑ 返回块指针             │
+├──────────────────────────────────────────────────────────────┤
+│     第2层：内存块元数据层 (MemBlock) - 数据操作               │
+│  mem_block_create()  /  mem_block_split()                    │
+│  mem_block_merge()  /  mem_block_verify()                    │
+│  ├─ 管理单个块的元数据（地址、大小、状态）                   │
+│  ├─ 块的分割操作                                             │
+│  ├─ 块的合并操作                                             │
+│  ├─ 块的查找和验证                                           │
+│  └─ 维护双向链表结构                                         │
+│                  ↓ 读写             ↑ 实际地址              │
+├──────────────────────────────────────────────────────────────┤
+│    第1层：虚拟内存管理层 (VMalloc) - 系统接口                │
+│  vmalloc()  /  vmfree()  /  vmalloc_cleanup()                │
+│  ├─ 直接调用 mmap/munmap 系统调用                            │
+│  ├─ 返回 4096 字节对齐的大块虚拟内存                         │
+│  ├─ 追踪已分配的虚拟内存区间                                 │
+│  └─ 提供诊断函数（vmalloc_dump）                            │
+│                  ↓ 申请              ↑ 虚拟地址             │
+├──────────────────────────────────────────────────────────────┤
+│                  Linux 内核 (mmap/munmap)                    │
+└──────────────────────────────────────────────────────────────┘
 ```
+
+### 数据结构关系图
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    全局状态                                   │
+├─────────────────────────────────────────────────────────────┤
+│                                                              │
+│  g_allocator (全局分配器指针)                               │
+│         ↓                                                    │
+│  ┌─ heap_t (全局堆管理器)                                   │
+│  │  ├─ blocks_head → mem_block 链表头                       │
+│  │  ├─ block_count = 5                                      │
+│  │  ├─ total_allocated = 3072                               │
+│  │  ├─ total_free = 37888                                   │
+│  │  ├─ lock (pthread_mutex_t)                               │
+│  │  └─ alloc_strategy = FIRST_FIT                           │
+│  │                                                           │
+│  └─ vm_manager (全局虚拟内存管理器)                         │
+│     ├─ regions_head → vm_region 链表头                      │
+│     │  ├─ [Region 0] addr=0x7f..., size=40960 (10页)       │
+│     │  ├─ [Region 1] addr=0x7g..., size=81920 (20页)       │
+│     │  └─ ...                                               │
+│     └─ total_allocated = 122880                             │
+│                                                              │
+└─────────────────────────────────────────────────────────────┘
+
+mem_block 链表结构：
+
+  NULL ← [Block 0] ↔ [Block 1] ↔ [Block 2] ↔ [Block 3] → NULL
+          (ALLOCATED)  (FREE)    (ALLOCATED)  (FREE)
+
+  每个 mem_block_t:
+  ┌──────────────────────────────┐
+  │ start_addr: 0x10000000       │
+  │ size: 1024                   │
+  │ state: ALLOCATED             │
+  │ prev: 指向前驱               │
+  │ next: 指向后继               │
+  └──────────────────────────────┘
+
+```
+
 
 ### 职责划分
 
@@ -262,6 +332,287 @@ if (!g_initialized) {
     }
     pthread_mutex_unlock(&g_init_lock);
 }
+```
+
+---
+## 场景示例：
+
+### 最简单分配过程：
+
+```
+第1步：用户代码调用 myalloc(1024)
+│
+├─→ allocator.c: myalloc(size_t size)
+│   参数：size = 1024
+│
+├─→ 检查分配器是否初始化
+│   如未初始化，自动调用 allocator_init(1)
+│
+├─→ allocator.c: heap_allocate(g_heap, 1024)
+│   调用堆管理器进行实际分配
+│
+├─→ heap.c: heap_allocate(heap_t *heap, size_t size)
+│   参数：heap = g_heap, size = 1024
+│
+│   步骤1：对齐大小
+│   aligned_size = ALIGN_UP(1024, 8) = 1024  （1024已对齐）
+│
+│   步骤2：加锁
+│   pthread_mutex_lock(&heap->lock)
+│   （确保多线程安全）
+│
+│   步骤3：查找空闲块
+│   free_block = heap_find_free_block(heap, 1024)
+│   遍历 blocks_head 链表，找第一个大小 >= 1024 且状态为 FREE 的块
+│
+│   假设找到：
+│   Block A: [0x10000000, 2048), FREE
+│
+│   步骤4：分割块
+│   mem_block_split(Block A, 1024)
+│   
+│   结果：
+│   Block A: [0x10000000, 1024), FREE   ← 前半部分
+│   Block B: [0x10000400, 1024), FREE   ← 后半部分（新块）
+│
+│   步骤5：标记分配
+│   Block A->state = ALLOCATED
+│
+│   步骤6：更新统计
+│   heap->total_allocated += 1024
+│   heap->total_free -= 1024
+│   heap->peak_allocated = max(peak, total_allocated)
+│
+│   步骤7：解锁
+│   pthread_mutex_unlock(&heap->lock)
+│
+├─→ 返回分配地址
+│   result = 0x10000000
+│
+└─→ 用户获得指针
+    ptr = 0x10000000
+    可以开始使用这块内存
+```
+
+#### 数据变化过程：
+
+```
+初始状态（申请前）：
+┌────────────────────────────────────┐
+│ Block: [0x10000000, 2048), FREE    │  ← 一个大的空闲块
+└────────────────────────────────────┘
+
+申请 myalloc(1024) 后：
+┌────────────────────────────────────┐
+│ Block A: [0x10000000, 1024), ALLOC │  ← 被分配的部分
+├────────────────────────────────────┤
+│ Block B: [0x10000400, 1024), FREE  │  ← 剩余的空闲部分
+└────────────────────────────────────┘
+
+内存布局（虚拟内存中）：
+   0x10000000       0x10000400       0x10000800
+   ↓                ↓                ↓
+   ┌────────────┬────────────┐
+   │ ALLOCATED  │    FREE    │
+   │  1024B     │   1024B    │
+   └────────────┴────────────┘
+   ↑                        ↑
+   ptr 指向这里             还可用的空间
+```
+
+### 堆内存不足的分配过程
+
+```
+第1步：用户调用 myalloc(50000)
+
+第2步：进入 heap_allocate(heap, 50000)
+│
+│   对齐：aligned_size = 50000
+│
+│   查找空闲块：heap_find_free_block(heap, 50000)
+│   ▼
+│   遍历链表：
+│   Block 0: size=1024, state=ALLOCATED  ✗ 不行
+│   Block 1: size=1024, state=FREE       ✗ 太小
+│   Block 2: ...                         ✗ 都太小或已分配
+│   Block N: ...                         ✗ 没找到
+│   
+│   结果：free_block = NULL （内存不足）
+│
+├─→ 需要扩展堆（第一次 vmalloc 调用）
+│
+├─→ vmalloc.c: vmalloc(NULL, extend_size)
+│   extend_size = ALIGN_UP(50000, 4096) = 53248 字节
+│   
+│   调用 mmap 系统调用：
+│   mmap(NULL,                       // 由OS选择地址
+│         53248,                     // 大小
+│         PROT_READ | PROT_WRITE,    // 可读写
+│         MAP_PRIVATE | MAP_ANONYMOUS,  // 私有匿名
+│         -1,                        // 无文件关联
+│         0)                         // 无偏移
+│   
+│   ▼ 系统调用进入内核
+│   内核分配虚拟内存页表
+│   ▼ 返回分配地址
+│   result = 0x7f1234567000
+│   
+├─→ 记录到 vm_manager
+│   创建 vm_region 结构
+│   region->start_addr = 0x7f1234567000
+│   region->length = 53248
+│   region->next = 旧的 regions_head
+│   g_vm_manager->regions_head = region
+│   g_vm_manager->total_allocated += 53248
+│
+├─→ 在堆中创建新块
+│   new_block = mem_block_create(
+│       0x7f1234567000,
+│       53248,
+│       MEM_FREE
+│   )
+│
+├─→ 添加到堆的块链表
+│   （插入到链表末尾，保持地址有序）
+│   ...existing blocks... ↔ [new_block]
+│   heap->block_count++
+│   heap->total_free += 53248
+│
+├─→ 重新查找空闲块
+│   free_block = new_block （53248, FREE）
+│
+├─→ 分割块
+│   mem_block_split(new_block, 50000)
+│   
+│   结果：
+│   allocated_part: [0x7f1234567000, 50000), ALLOCATED
+│   free_part:      [0x7f1234568c80, 3248),  FREE
+│
+├─→ 标记、更新统计、解锁
+│
+└─→ 返回 0x7f1234567000
+```
+
+#### 虚拟内存和堆块的关系：
+
+```
+虚拟内存池（通过 vmalloc 申请）：
+
+vmalloc(NULL, 40960) → 0x10000000
+┌─────────────────────────────────────────────┐
+│   40960 字节虚拟内存（10 页）                │
+│   0x10000000 ~ 0x1000a000                   │
+└─────────────────────────────────────────────┘
+         ↑ 初始化为一个 FREE 块 40960
+
+
+vmalloc(NULL, 53248) → 0x7f1234567000
+┌──────────────────────────────────────────────┐
+│   53248 字节虚拟内存（13 页）                 │
+│   0x7f1234567000 ~ 0x7f123456d000           │
+└──────────────────────────────────────────────┘
+         ↑ 初始化为一个 FREE 块 53248
+
+
+堆管理层的块链表（跨越两个虚拟内存区域）：
+
+Block 0: [0x10000000, 1024)   ALLOCATED
+Block 1: [0x10000400, 1024)   FREE
+...
+Block N: [0x7f1234567000, 50000)  ALLOCATED
+Block N+1: [0x7f1234568c80, 3248)  FREE
+
+注意：块可能跨越不同的虚拟内存区域，
+      但它们在堆管理器中保持全局有序
+```
+
+### 内存释放过程：
+
+调用：myfree(ptr); 其中 ptr = 0x10000000
+
+```
+第1步：用户调用 myfree(0x10000000)
+
+第2步：进入 allocator.c: myfree(void *ptr)
+│
+├─→ 参数检查：ptr != NULL
+│
+├─→ 调用 heap_free(g_heap, ptr)
+
+第3步：进入 heap.c: heap_free(heap_t *heap, void *addr)
+│   参数：heap = g_heap, addr = 0x10000000
+│
+│   加锁：pthread_mutex_lock(&heap->lock)
+│
+├─→ 步骤1：查找包含该地址的块
+│   block = heap_find_block(heap, 0x10000000)
+│   
+│   遍历 blocks_head 链表，用 mem_block_contains 检查
+│   Block 0: [0x10000000, 1024) ✓ 包含地址 0x10000000
+│   result: Block 0
+│
+├─→ 步骤2：验证块状态
+│   检查 block->state == ALLOCATED （是的）
+│
+├─→ 步骤3：标记为释放
+│   block->state = FREE
+│   
+│   现在的链表状态：
+│   Block 0: [0x10000000, 1024)   FREE
+│   Block 1: [0x10000400, 1024)   FREE   ← 相邻的 FREE 块！
+│
+├─→ 步骤4：尝试与相邻块合并
+│   _heap_try_merge_adjacent(block)
+│   
+│   检查后继块是否是 FREE
+│   Block 0->next == Block 1
+│   Block 1->state == FREE ✓
+│   Block 0 和 Block 1 相邻 ✓
+│   
+│   执行合并：mem_block_merge(Block 0, Block 1)
+│   
+│   结果：
+│   Block 0: [0x10000000, 2048)   FREE
+│   （Block 1 被销毁）
+│   
+│   链表现在：
+│   Block 0: [0x10000000, 2048)   FREE
+│   Block 2: [..., ...]
+│
+├─→ 步骤5：检查与前驱块的合并
+│   Block 0->prev = NULL （没有前驱）
+│
+├─→ 步骤6：更新统计信息
+│   heap->total_allocated -= 1024
+│   heap->total_free += 1024
+│
+│   解锁：pthread_mutex_unlock(&heap->lock)
+│
+└─→ 返回 0 （成功）
+```
+
+#### 内存状态变化：
+
+```
+释放前（两个相邻的块，都已分配）：
+┌────────────────────┬────────────────────┐
+│ ALLOCATED (1024)   │ ALLOCATED (1024)   │
+│ [0x10000000]       │ [0x10000400]       │
+└────────────────────┴────────────────────┘
+
+myfree(0x10000000) 第一步（标记为 FREE）：
+┌────────────────────┬────────────────────┐
+│ FREE (1024)        │ ALLOCATED (1024)   │
+│ [0x10000000]       │ [0x10000400]       │
+└────────────────────┴────────────────────┘
+
+myfree 继续，与后继合并：
+┌─────────────────────────────────────────┐
+│ FREE (2048)                             │
+│ [0x10000000]  已与后继合并              │
+└─────────────────────────────────────────┘
+
+最终状态：块被释放，内存可重新分配
 ```
 
 ---
