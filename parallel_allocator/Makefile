@@ -24,7 +24,7 @@ OBJ_DIR := $(BUILD_DIR)/obj
 LIB_DIR := $(BUILD_DIR)/lib
 TEST_DIR := tests
 EXAMPLES_DIR := examples
-DOCS_DIR := docs
+
 
 # 源文件
 CORE_SRCS := $(SRC_DIR)/vmalloc.c $(SRC_DIR)/mem_block.c $(SRC_DIR)/heap.c $(SRC_DIR)/allocator.c $(SRC_DIR)/debug.c
