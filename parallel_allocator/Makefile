@@ -25,7 +25,6 @@ LIB_DIR := $(BUILD_DIR)/lib
 TEST_DIR := tests
 EXAMPLES_DIR := examples
 
-
 # 源文件
 CORE_SRCS := $(SRC_DIR)/vmalloc.c $(SRC_DIR)/mem_block.c $(SRC_DIR)/heap.c $(SRC_DIR)/allocator.c $(SRC_DIR)/debug.c
 CORE_OBJS := $(patsubst $(SRC_DIR)/%.c,$(OBJ_DIR)/%.o,$(CORE_SRCS))
