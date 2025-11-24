@@ -21,10 +21,16 @@
  */
 typedef struct {
     float *data;        // 数据指针（堆分配）
-    size_t *shape;      // 维度数组，如[batch, seq_len, hidden_dm]
+    size_t *shape;      // 各维度数组，如[batch, seq_len, hidden_dm]
+    size_t *stride;     // 各维度步长数组
     size_t ndim;        // 维度数量
     size_t size;        // 总元素数量
+    size_t offset;      // 数据偏移（用于切片等共享场景）  
+    bool owns_data;     // 是否拥有数据所有权（用于切片等共享场景）
 } Tensor;
+
+
+/* ========== 基本操作 API ========== */
 
 /**
  * @name tensor_create
@@ -58,6 +64,7 @@ Tensor* tensor_create(size_t ndim, const size_t *shape);
  */
 Tensor* tensor_create_with_value(size_t ndim, const size_t *shape, float value);
 
+
 /**
  * @name tensor_from_data
  * @brief 从已有数据创建张量
@@ -84,19 +91,52 @@ void tensor_free(Tensor *t);
 
 
 /**
- * @name tensor_offset
- * @brief 多维索引转一维偏移
+ * @name tensor_transpose
+ * @brief 张量转置（仅限二维张量）
+ * 
+ * @param t - 待转置张量指针
+ * 
+ * @return 
+ *      successful - 返回新张量指针（数据复制）
+ *      failed - 返回 NULL
+ */
+Tensor* tensor_transpose(const Tensor *t);
+
+
+/* ========== 切片操作 API ==========*/
+
+/**
+ * @name tensor_slice
+ * @brief 张量切片
+ * 
+ * @param t             - 待切片张量指针
+ * @param start         - 切片起始索引数组
+ * @param end           - 切片结束索引数组（不包含）
+ * @param force_copy    - 是否强制复制数据
+ * 
+ * @return
+ *      successful - 返回新张量指针
+ *      failed - 返回 NULL
+ */
+Tensor* tensor_slice(const Tensor *t, const size_t *start, const size_t *end, const bool force_copy);
+
+
+/* ========== 索引操作 API ========== */
+
+/**
+ * @name tensor_offset_with_stride
+ * @brief 多维索引转一维偏移（考虑步长）
  * 
  * @param t - 张量指针
  * @param indices - 多维索引数组
  * 
  * @return
- *     返回一维偏移量（
+ *     返回一维偏移量（考虑步长）
  * 
- * 算法：行优先（Row-Major）计算
- *    offset = Σ (indices[i] * Π shape[j])，其中 j > i
+ * 算法：使用预计算的步长数组
+ *    offset = Σ (indices[i] * stride[i])
  */
-size_t tensor_offset(const Tensor *t, const size_t *indices);
+size_t tensor_offset_with_stride(const Tensor *t, const size_t *indices);
 
 
 /**
@@ -128,7 +168,7 @@ float tensor_get(const Tensor *t, const size_t *indices);
 void tensor_set(Tensor *t, const size_t *indices, float value);
 
 
-/* ========== 形状操作 ========== */
+/* ========== 形状操作 API ========== */
 
 /**
  * @name tensor_shape_equal
@@ -153,6 +193,7 @@ bool tensor_shape_equal(const Tensor *a, const Tensor *b);
  *     返回新张量指针（深拷贝） 
  */
 Tensor* tensor_clone(const Tensor *t);
+
 
 /**
  * @name tensor_reshape
@@ -225,5 +266,6 @@ typedef struct {
  *      返回张量统计信息结构体
  */
 tensor_stats tensor_compute_stats(const Tensor *t);
+
 
 #endif /* __TENSOR_H__ */
