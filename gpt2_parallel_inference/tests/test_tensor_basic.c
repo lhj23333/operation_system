@@ -5,7 +5,7 @@
 /**
  * 测试 1：创建和销毁 Tensor
  */
-void test_tensor_create_destroy() {
+void test_create_and_destroy() {
     INFO_PRINT("=== Test: Create and Destroy ===");
 
     size_t shape[] = {2, 3, 4};
@@ -14,7 +14,7 @@ void test_tensor_create_destroy() {
     // 验证元数据
     ASSERT(t != NULL, "Tensor creation failed");
     ASSERT(t->ndim == 3, "Tensor ndim incorrect");
-    ASSERT(t.size == 24, "Tensor size incorrect");
+    ASSERT(t->size == 24, "Tensor size incorrect");
     ASSERT(t->data != NULL, "Tensor data allocation failed");
     ASSERT(t->shape != NULL, "Tensor shape allocation failed");
 
@@ -47,7 +47,7 @@ void test_indexing() {
 
     // 手动设置数据
     for (size_t i = 0; i < t->size; i ++) {
-        t->data[i] == (float)i;
+        t->data[i] = (float)i;
     }
 
     // 测试索引计算
@@ -63,7 +63,7 @@ void test_indexing() {
     };
 
     for (size_t i = 0; i < ARRAY_SIZE(tests); i ++) {
-        size_t offset = tensor_offset(t, tests[i].indices);
+        size_t offset = tensor_offset_with_stride(t, tests[i].indices);
         float value = tensor_get(t, tests[i].indices);
 
         DEBUG_PRINT("Indices:[%zu, %zu, %zu] => Offset: %zu, Value: %.1f",
@@ -182,7 +182,7 @@ void test_performance() {
 
 int main() {
     INFO_PRINT("╔════════════════════════════════════════╗");
-    INFO_PRINT("║   Tensor Basic Tests                  ║");
+    INFO_PRINT("║   Tensor Basic Tests                   ║");
     INFO_PRINT("╚════════════════════════════════════════╝\n");
     
     test_create_and_destroy();
@@ -191,8 +191,8 @@ int main() {
     test_edge_cases();
     test_performance();
     
-    INFO_PRINT("\n╔════════════════════════════════════════╗");
-    INFO_PRINT("║   All Tests PASSED! 🎉                ║");
+    INFO_PRINT("╔════════════════════════════════════════╗");
+    INFO_PRINT("║   All Tests PASSED! 🎉                 ║");
     INFO_PRINT("╚════════════════════════════════════════╝");
     
     return 0;

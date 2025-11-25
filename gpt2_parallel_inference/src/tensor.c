@@ -61,11 +61,13 @@ static void _tensor_compute_default_strides(Tensor *t) {
         stride *= t->shape[i];
     }
 
-    DEBUG_PRINT("_tensor_compute_default_strides: Computed strides: [");
-    for (size_t i = 0; i < t->ndim; i ++) {
-        DEBUG_PRINT("%zu%s", t->stride[i], (i < t->ndim - 1) ? "," : "");
-    }
-    DEBUG_PRINT("]");
+    #ifdef DEBUG
+        printf("[DEBUG] _tensor_compute_default_strides: Computed strides: [");
+        for (size_t i = 0; i < t->ndim; i ++) {
+            printf("%zu%s", t->stride[i], (i < t->ndim - 1) ? "," : "");
+        }
+        printf("]\n");
+    #endif
 
     DEBUG_PRINT("_tensor_compute_default_strides: Strides computed successfully");
 }
@@ -324,12 +326,12 @@ Tensor* tensor_create(size_t ndim, const size_t *shape) {
     }
 
     #ifdef DEBUG
-        DEBUG_PRINT("Shape: [");
+        printf("[DEBUG] tensor_create: create tensor shape: [");
         for (size_t i = 0; i < ndim; i ++) {
             t->shape[i] = shape[i];
-            DEBUG_PRINT("%zu%s", shape[i], (i < ndim - 1) ? "," : "");
+            printf("%zu%s", shape[i], (i < ndim - 1) ? "," : "");
         }
-        DEBUG_PRINT("]\n");
+        printf("]\n");
     #else
         for(size_t i = 0; i < ndim; i ++) {
             t->shape[i] = shape[i];
@@ -641,9 +643,9 @@ void tensor_print_info(const Tensor *t) {
     }
 
     printf("╔════════════════════════════════════╗\n");
-    printf("║       Tensor Information          ║\n");
+    printf("║       Tensor Information           ║\n");
     printf("╠════════════════════════════════════╣\n");
-    printf("║ Dimensions: %zu%-20s║\n", t->ndim, "");
+    printf("║ Dimensions: %zu%-20s  ║\n", t->ndim, "");
 
     printf("║ Shape: [");
     for (size_t i = 0; i < t->ndim; i ++) {
@@ -651,13 +653,13 @@ void tensor_print_info(const Tensor *t) {
     }
     int padding = 28 - (int)(t->ndim * 4);
     if (padding < 0) padding = 0;
-    printf("]%-*s║\n", padding, "");
+    printf("]%-*s     ║\n", padding, "");
 
-    printf("║ Total Elements: %zu%-15s║\n", t->size, "");
-    printf("║ Memory: %.2f MB%-19s║\n", 
+    printf("║ Total Elements: %zu%-15s  ║\n", t->size, "");
+    printf("║ Memory: %.2f MB%-19s ║\n", 
            (t->size * sizeof(float)) / (1024.0 * 1024.0), "");
-    printf("║ Data pointer: %p%-10s║\n", (void*)t->data, "");
-    printf("║ Owns data: %s%-23s║\n", t->owns_data ? "true" : "false", "");
+    printf("║ Data pointer: %p%-7s║\n", (void*)t->data, "");
+    printf("║ Owns data: %s%-20s║\n", t->owns_data ? "true" : "false", "");
     printf("╚════════════════════════════════════╝\n");
 }
 
