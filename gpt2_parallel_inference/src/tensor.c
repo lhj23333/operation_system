@@ -439,33 +439,6 @@ void tensor_free(Tensor *t) {
 
 /* ========== 索引操作 ========== */
 
-/*
- * 三维张量 T[2][3][4] 的内存映射
- * 
- * 维度含义：[深度][行][列]
- * 
- * 逻辑视图：
- *   层0:  | 0  1  2  3 |      层1:  | 12 13 14 15 |
- *         | 4  5  6  7 |            | 16 17 18 19 |
- *         | 8  9 10 11 |            | 20 21 22 23 |
- * 
- * 物理内存（一维）：
- *   [0][1][2][3][4][5]...[22][23]
- *    └─────────┘ └────────┘
- *       层0行0      层0行1
- * 
- * 索引公式（行优先）：
- *   offset = i * (rows * cols) + j * cols + k
- *          = i * 12 + j * 4 + k
- * 
- * 例：(shape=[2,3,4], indices=[1,2,3]);
- * T[1][2][3] → offset = 1*12 + 2*4 + 3 = 23 ✓
- * 
- * i=2: offset = 0 + 3 * 1 = 3;     stride = 1 * 4 = 4;
- * i=1: offset = 3 + 2 * 4 = 11;    stride = 4 * 3 = 12;
- * i=0: offset = 11 + 1 * 12 = 23;  stride = 12 * 2 = 24;
- * 
- */
 size_t tensor_offset_with_stride(const Tensor *t, const size_t *indices) {
     if (t == NULL || indices == NULL) {
         ERROR_PRINT("tensor_offset_with_stride: Invalid arguments");
