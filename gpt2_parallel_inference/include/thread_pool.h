@@ -8,11 +8,11 @@
 /**
  * 线程池结构体
  */
-typedef struct thread_pool {
-    int num_threads;                // 工作线程数量
-    int queue_size;                 // 任务队列大小
-    int stack_size;                 // 线程栈大小（可选）
-    bool daemon_threads;            // 是否为守护线程
+typedef struct {
+    int num_threads;        // 工作线程数量
+    int queue_size;         // 任务队列大小
+    int stack_size;         // 线程栈大小（可选）
+    bool daemon_threads;    // 是否为守护线程
 } thread_pool_cfg_t;
 
 /**
@@ -22,7 +22,8 @@ typedef struct {
     pthread_t tid;                  // 线程ID
     int id;                         // 线程编号
     size_t tasks_completed;         // 已完成任务数
-    bool is_active;                 // 线程是否活跃
+    bool is_active;                 // 线程活跃状态
+    bool should_exit;               // 线程退出标志位（用于动态调整线程数）
 } thread_info_t;
 
 /**
@@ -31,7 +32,7 @@ typedef struct {
 typedef enum {
     POOL_CREATED = 0,   // 已创建
     POOL_RUNNING = 1,   // 正在运行
-    POOL_STOPPIING = 2, // 正在停止
+    POOL_STOPPING = 2, // 正在停止
     POOL_STOPPED = 3    // 已停止
 } thread_pool_state_t;
 
@@ -54,15 +55,15 @@ typedef struct {
 
     /* 状态管理 */
     thread_pool_state_t state;      // 线程池状态
-    pthread_mutex_t state_mutex;    // 状态互斥锁
+    pthread_mutex_t state_lock;     // 状态互斥锁
     pthread_cond_t state_changed;   // 状态条件变量
 
-    /* 统计信息 */
-    struct {
-        size_t total_tasks;         // 总任务数
-        size_t failed_tasks;        // 失败任务数
-        double total_time;          // 总时间
-    } stats;
+    // /* 统计信息 */
+    // struct {
+    //     size_t total_tasks;         // 总任务数
+    //     size_t failed_tasks;        // 失败任务数
+    //     double total_time;          // 总时间
+    // } stats;
 
     /* 线程关闭标志 */
     volatile bool shutdown;
@@ -101,13 +102,14 @@ void thread_pool_destroy(thread_pool_t *pool);
  * @param pool 线程池指针
  * @param func 任务函数指针
  * @param arg 任务参数指针
+ * @param cleanup 任务清理函数指针（可选）
  * 
  * @return
  *      successful: 0
  *      failed: -1
  */
 
-int thread_pool_submit(thread_pool_t *pool, void (*func)(void *), void *arg);
+int thread_pool_submit(thread_pool_t *pool, void (*func)(void *), void *arg, void (*cleanup)(void *));
 
 
 /**
