@@ -116,9 +116,7 @@ test-matrix: debug
 .PHONY: benchmark
 benchmark: release
 	@echo "=== Running benchmarks ==="
-	@if [ -f $(BIN_DIR)/benchmark ]; then \
-		$(BIN_DIR)/benchmark; \
-	elif [ -f $(BIN_DIR)/benchmarks ]; then \
+	@if [ -f $(BIN_DIR)/benchmarks ]; then \
 		$(BIN_DIR)/benchmarks; \
 	else \
 		echo "No benchmark found"; exit 1; \
@@ -131,14 +129,14 @@ benchmark: release
 .PHONY: perf
 perf: release
 	@echo "=== Running perf analysis ==="
-	@perf record -g $(BIN_DIR)/benchmark
+	@perf record -e task-clock -g $(BIN_DIR)/benchmarks
 	@perf report
 
 .PHONY: perf-stat
 perf-stat: release
 	@echo "=== Running perf stat ==="
 	@perf stat -e cache-references,cache-misses,L1-dcache-loads,L1-dcache-load-misses \
-		$(BIN_DIR)/benchmark
+		$(BIN_DIR)/benchmarks
 
 .PHONY: valgrind
 valgrind:
@@ -149,16 +147,15 @@ valgrind:
 valgrind-run: CFLAGS += $(VALGRIND_FLAGS)
 valgrind-run: $(OBJECTS) $(TEST_BINS)
 	@echo "=== Valgrind build complete ==="
-	@echo "=== Running valgrind memory check ==="
-	@if [ -f $(BIN_DIR)/test_tensor_basic ]; then \
-		valgrind --leak-check=full --show-leak-kinds=all \
-			--track-origins=yes $(BIN_DIR)/test_tensor_basic; \
-	elif [ -f $(BIN_DIR)/test_tensor ]; then \
-		valgrind --leak-check=full --show-leak-kinds=all \
-			--track-origins=yes $(BIN_DIR)/test_tensor; \
-	else \
-		echo "No test binary found for valgrind"; exit 1; \
-	fi
+	@echo "=== Running valgrind memory check on all test binaries ==="
+	@for test in $(BIN_DIR)/*; do \
+		if [ -x $$test ]; then \
+			echo "Running valgrind on $$test..."; \
+			valgrind --leak-check=full --show-leak-kinds=all \
+				--track-origins=yes $$test || exit 1; \
+		fi; \
+	done
+	@echo "=== All valgrind checks complete ==="
 # ========================================
 # 清理和安装
 # ========================================
