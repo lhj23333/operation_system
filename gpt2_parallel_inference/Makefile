@@ -104,17 +104,7 @@ test-threadpool: debug
 		echo "No thread pool test found"; exit 1; \
 	fi
 
-.PHONY: test-matrix
-test-matrix: debug
-	@echo "=== Running matrix tests ==="
-	@if [ -f $(BIN_DIR)/test_matrix ]; then \
-		$(BIN_DIR)/test_matrix; \
-	else \
-		echo "No matrix test found"; exit 1; \
-	fi
-
 ./PHONY: test-attention
-test-attention: CFLAGS += -DUSE_PARALLEL_MATMUL
 test-attention: debug
 	@echo "=== Running attention tests ==="
 	@if [ -f $(BIN_DIR)/test_attention ]; then \

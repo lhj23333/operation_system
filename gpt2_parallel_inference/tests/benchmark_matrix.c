@@ -72,7 +72,7 @@ matmul_benchmark_t matmul_benchmark(size_t M, size_t K, size_t N, int num_thread
     
     // 初始化矩阵库
     matrix_config_t config = {
-        . num_threads = num_threads,
+        .num_threads = num_threads,
         .block_size = 32,
         .use_blocking = true,
         .use_simd = false

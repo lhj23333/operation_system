@@ -2,12 +2,8 @@
 #include <sys/time.h>
 
 // 并行化阈值：小于此值使用串行版本
-#define PARALLEL_THRESHOLD (64 * 64 * 64)  // M * K * N 的乘积阈值
-#define MIN_ROWS_PER_TASK 4  // 每个任务最少处理的行数
-
-// 并行化阈值：小于此值使用串行版本
-#define PARALLEL_THRESHOLD (64 * 64 * 64)  // M * K * N 的乘积阈值
-#define MIN_ROWS_PER_TASK 4  // 每个任务最少处理的行数
+#define PARALLEL_THRESHOLD (64 * 64 * 64)   // M * K * N 的乘积阈值
+#define MIN_ROWS_PER_TASK 4                 // 每个任务最少处理的行数
 
 static matrix_config_t g_matrix_cfg;
 static thread_pool_t *g_thread_pool = NULL;
@@ -198,13 +194,13 @@ void matmul_parallel_row(const Tensor *A, const Tensor *B, Tensor *C) {
     ASSERT(K == B->shape[0], "Dimension mismatch");
     ASSERT(M == C->shape[0] && N == C->shape[1], "Output size mismatch");
 
-    // 小矩阵直接使用串行版本
-    size_t work_size = M * K * N;
-    if (work_size < PARALLEL_THRESHOLD || M < (size_t)g_matrix_cfg.num_threads) {
-        DEBUG_PRINT("Matrix too small (%zu), using serial version", work_size);
-        matmul_serial_ikj(A, B, C);
-        return;
-    }
+    // // 小矩阵直接使用串行版本
+    // size_t work_size = M * K * N;
+    // if (work_size < PARALLEL_THRESHOLD || M < (size_t)g_matrix_cfg.num_threads) {
+    //     DEBUG_PRINT("Matrix too small (%zu), using serial version", work_size);
+    //     matmul_serial_ikj(A, B, C);
+    //     return;
+    // }
 
     INFO_PRINT("Parallel row-wise matmul: [%zu x %zu] @ [%zu x %zu] (threads: %d)",
                 M, K, K, N, g_matrix_cfg.num_threads);
@@ -293,13 +289,13 @@ void matmul_parallel_blocked(const Tensor *A, const Tensor *B, Tensor *C) {
     ASSERT(K == B->shape[0], "Dimension mismatch");
     ASSERT(M == C->shape[0] && N == C->shape[1], "Output size mismatch");
 
-    // 小矩阵直接使用串行版本
-    size_t work_size = M * K * N;
-    if (work_size < PARALLEL_THRESHOLD || M < (size_t)g_matrix_cfg.num_threads) {
-        DEBUG_PRINT("Matrix too small (%zu), using serial blocked version", work_size);
-        matmul_serial_blocked(A, B, C);
-        return;
-    }
+    // // 小矩阵直接使用串行版本
+    // size_t work_size = M * K * N;
+    // if (work_size < PARALLEL_THRESHOLD || M < (size_t)g_matrix_cfg.num_threads) {
+    //     DEBUG_PRINT("Matrix too small (%zu), using serial blocked version", work_size);
+    //     matmul_serial_blocked(A, B, C);
+    //     return;
+    // }
 
     INFO_PRINT("Parallel blocked matmul: [%zu x %zu] @ [%zu x %zu] (threads: %d, block_size: %zu)",
                 M, K, K, N, g_matrix_cfg.num_threads, g_matrix_cfg.block_size);
