@@ -113,6 +113,24 @@ typedef struct {
     double efficiency;
 } matmul_benchmark_t;
 
+/**
+ * @name matmul_benchmark
+ * @brief 矩阵乘法性能测试
+ * 
+ * @param M 矩阵 A 的行数
+ * @param K 矩阵 A 的列数 / 矩阵 B 的行数
+ * @param N 矩阵 B 的列数
+ * @param num_threads 使用的线程数
+ */
 matmul_benchmark_t matmul_benchmark(size_t M, size_t K, size_t N, int num_threads);
+
+
+/**
+ * @name matrix_get_thread_pool
+ * @brief 获取全局矩阵计算线程池
+ * 
+ * @return thread_pool_t* 线程池指针，未初始化时返回 NULL
+ */
+thread_pool_t* matrix_get_thread_pool(void);
 
 #endif /* __MATRIX_PARALLEL_H__ */

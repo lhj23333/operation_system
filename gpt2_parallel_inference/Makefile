@@ -113,15 +113,27 @@ test-matrix: debug
 		echo "No matrix test found"; exit 1; \
 	fi
 
+./PHONY: test-attention
+test-attention: CFLAGS += -DUSE_PARALLEL_MATMUL
+test-attention: debug
+	@echo "=== Running attention tests ==="
+	@if [ -f $(BIN_DIR)/test_attention ]; then \
+		$(BIN_DIR)/test_attention; \
+	else \
+		echo "No attention test found"; exit 1; \
+	fi
+
 .PHONY: benchmark
 benchmark: release
 	@echo "=== Running benchmarks ==="
-	@if [ -f $(BIN_DIR)/benchmarks ]; then \
-		$(BIN_DIR)/benchmarks; \
-	else \
-		echo "No benchmark found"; exit 1; \
-	fi
-
+	@for test in $(BIN_DIR)/*benchmark*; do \
+		if [ -x $$test ]; then \
+			echo "Running $$test..."; \
+			$$test || exit 1; \
+		fi; \
+	done
+	@echo "=== Benchmarking complete ==="
+	
 # ========================================
 # 性能分析
 # ========================================
